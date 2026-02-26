@@ -143,6 +143,9 @@ class GameState: ObservableObject {
     
     @Published var savedMandalas: [MandalaSnapshot] = []
     
+    // Flag to defer board reset until user returns to game
+    var needsReset: Bool = false
+    
     @Published var symmetryCount: Int = 8
     @Published var ringCount: Int = 4
     
