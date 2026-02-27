@@ -116,7 +116,10 @@ class GameState: ObservableObject {
         didSet {
             if selectedFlower != nil {
                 selectedGridShape = nil
-                activeTool = nil
+                // Keep slideFill active when switching flowers
+                if activeTool != .slideFill {
+                    activeTool = nil
+                }
             }
         }
     }
@@ -143,8 +146,8 @@ class GameState: ObservableObject {
     
     @Published var savedMandalas: [MandalaSnapshot] = []
     
-    // Flag to defer board reset until user returns to game
-    var needsReset: Bool = false
+    // Signal for scene to rebuild
+    @Published var shouldResetScene: Bool = false
     
     @Published var symmetryCount: Int = 8
     @Published var ringCount: Int = 4
@@ -217,6 +220,19 @@ class GameState: ObservableObject {
         sessionStartTime = Date()
     }
     
+    func startNewMandala() {
+        harmonyScore = 0
+        harmonyFeedback = "A blank garden awaits your creative touch."
+        currentMoodIcon = "leaf.fill"
+        currentMoodLabel = "Awaiting"
+        currentInsight = nil
+        currentReport = nil
+        undoStack.removeAll()
+        resetSessionMetrics()
+        shouldResetScene = true
+        navigate(to: .game)
+    }
+    
     func evaluateHarmony(slots: [HarmonyScorer.MandalaSlotData]) {
         lastSlotData = slots
         let insight = InsightEngine.analyze(slots: slots)
@@ -233,7 +249,8 @@ class GameState: ObservableObject {
             flowerChanges: flowerChanges,
             sessionDuration: sessionDuration,
             slotsFilledCount: slotsFilledCount,
-            slotsErasedCount: slotsErasedCount
+            slotsErasedCount: slotsErasedCount,
+            themeKey: selectedGrid
         )
         currentReport = report
         

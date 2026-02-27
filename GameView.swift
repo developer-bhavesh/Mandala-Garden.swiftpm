@@ -70,7 +70,8 @@ struct GameView: View {
     }
 
     private func setupScene() {
-        if scene == nil {
+        if gameState.shouldResetScene || scene == nil {
+            gameState.shouldResetScene = false
             let s = MandalaScene()
             s.size = UIScreen.main.bounds.size
             s.scaleMode = .resizeFill
@@ -79,10 +80,6 @@ struct GameView: View {
                 gameState?.evaluateHarmony(slots: slots)
             }
             scene = s
-        } else if gameState.needsReset {
-            // Deferred reset after Save & Insight
-            gameState.needsReset = false
-            scene?.resetBoard()
         }
     }
 
@@ -96,8 +93,6 @@ struct GameView: View {
         if let pngData = image?.pngData() {
             gameState.saveSnapshot(imageData: pngData)
             if gameState.currentInsight != nil {
-                // Mark the board for reset when user returns to game
-                gameState.needsReset = true
                 gameState.navigate(to: .insight)
             }
         }

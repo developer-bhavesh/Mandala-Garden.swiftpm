@@ -503,17 +503,19 @@ class MandalaScene: SKScene {
         // Add new ring circles for expanded area
         let existingRingCount = ringNodes.count
         let neededRings = Int(needed / ringSpacing)
-        for i in (existingRingCount + 1)...neededRings {
-            let radius = CGFloat(i) * ringSpacing
-            let ring = SKShapeNode(circleOfRadius: radius)
-            ring.fillColor = .clear
-            ring.strokeColor = UIColor(theme.ringColor).withAlphaComponent(0.15)
-            ring.lineWidth = 1
-            ring.zPosition = 1
-            ring.alpha = 0
-            worldNode.addChild(ring)
-            ring.run(SKAction.fadeAlpha(to: 1.0, duration: 0.3))
-            ringNodes.append(ring)
+        if neededRings > existingRingCount {
+            for i in (existingRingCount + 1)...neededRings {
+                let radius = CGFloat(i) * ringSpacing
+                let ring = SKShapeNode(circleOfRadius: radius)
+                ring.fillColor = .clear
+                ring.strokeColor = UIColor(theme.ringColor).withAlphaComponent(0.15)
+                ring.lineWidth = 1
+                ring.zPosition = 1
+                ring.alpha = 0
+                worldNode.addChild(ring)
+                ring.run(SKAction.fadeAlpha(to: 1.0, duration: 0.3))
+                ringNodes.append(ring)
+            }
         }
         
         currentBgRadius = needed

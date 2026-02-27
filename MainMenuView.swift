@@ -79,7 +79,7 @@ struct MainMenuView: View {
                         // Menu Buttons
                         VStack(spacing: 14) {
                             RajButton("Create Mandala", icon: "leaf.fill", color: theme.accent, fontSize: isCompact ? 15 : 18) {
-                                gameState.navigate(to: .game)
+                                gameState.startNewMandala()
                             }
 
                             RajButton("Gallery", icon: "photo.on.rectangle.angled", color: theme.ringColor, fontSize: isCompact ? 15 : 18) {

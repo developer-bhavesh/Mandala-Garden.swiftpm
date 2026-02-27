@@ -150,13 +150,25 @@ class PersonalityEngine {
         "Dahlia": (0.6, 0.6, "Elegance & Creativity", 0.7, 0.6)
     ]
     
+    /// Theme background warmth mapping
+    private static let themeWarmth: [String: (warmth: Double, mood: String)] = [
+        "jaipur": (0.8, "warm and majestic"),
+        "jodhpur": (0.3, "cool and meditative"),
+        "udaipur": (0.4, "serene and romantic"),
+        "jaisalmer": (0.9, "golden and bold"),
+        "bikaner": (0.7, "earthy and grounded"),
+        "pushkar": (0.5, "spiritual and balanced"),
+        "chittorgarh": (0.6, "heroic and regal")
+    ]
+    
     static func analyze(
         slots: [HarmonyScorer.MandalaSlotData],
         undoCount: Int,
         flowerChanges: Int,
         sessionDuration: TimeInterval,
         slotsFilledCount: Int,
-        slotsErasedCount: Int
+        slotsErasedCount: Int,
+        themeKey: String = "jaipur"
     ) -> PersonalityReport {
         let occupied = slots.filter { $0.flower != nil }
         let total = max(slots.count, 1)
@@ -206,10 +218,12 @@ class PersonalityEngine {
         let eraseRatio = slotsFilledCount > 0 ? Double(slotsErasedCount) / Double(slotsFilledCount) : 0
         
         // === Big Five Personality Traits ===
+        let themeBgWarmth = themeWarmth[themeKey]?.warmth ?? 0.5
         let bigFive = computeBigFive(
             symmetry: symmetry, typeVariety: typeVariety, completeness: completeness,
             entropy: normalizedEntropy, tintUsage: tintUsage, undoRatio: undoRatio,
-            warmth: computeWarmth(occupied), eraseRatio: eraseRatio, decisionRate: decisionRate
+            warmth: computeWarmth(occupied), eraseRatio: eraseRatio, decisionRate: decisionRate,
+            bgWarmth: themeBgWarmth
         )
         
         // === Cognitive Style ===
@@ -230,9 +244,11 @@ class PersonalityEngine {
         
         // === Summary Generation ===
         let summary = generateSummary(bigFive: bigFive, cognitive: cognitive, creative: creative)
+        let themeMood = themeWarmth[themeKey]?.mood ?? "balanced"
         let detailed = generateDetailedInsight(
             bigFive: bigFive, cognitive: cognitive, colorProfile: colorProfile,
-            creative: creative, symmetry: symmetry, completeness: completeness
+            creative: creative, symmetry: symmetry, completeness: completeness,
+            themeMood: themeMood
         )
         
         return PersonalityReport(
@@ -250,20 +266,24 @@ class PersonalityEngine {
     private static func computeBigFive(
         symmetry: Double, typeVariety: Double, completeness: Double,
         entropy: Double, tintUsage: Double, undoRatio: Double,
-        warmth: Double, eraseRatio: Double, decisionRate: Double
+        warmth: Double, eraseRatio: Double, decisionRate: Double,
+        bgWarmth: Double = 0.5
     ) -> BigFiveTraits {
+        // Blend flower warmth with theme bg warmth (70/30 split)
+        let blendedWarmth = warmth * 0.7 + bgWarmth * 0.3
         // Openness: High variety, tint usage, low symmetry = openness to new experiences
         let openness = clamp(typeVariety * 0.35 + entropy * 0.25 + tintUsage * 0.2 + (1.0 - symmetry) * 0.2)
         
         // Conscientiousness: High symmetry, high completeness, low undo = organized
         let conscientiousness = clamp(symmetry * 0.4 + completeness * 0.35 + (1.0 - undoRatio) * 0.25)
         
-        // Extraversion: Warm colors, high fill rate, bold choices
-        let extraversion = clamp(warmth * 0.35 + min(decisionRate / 10.0, 1.0) * 0.3 + completeness * 0.2 + typeVariety * 0.15)
+        // Extraversion: Warm colors + warm theme bg, high fill rate, bold choices
+        let extraversion = clamp(blendedWarmth * 0.35 + min(decisionRate / 10.0, 1.0) * 0.3 + completeness * 0.2 + typeVariety * 0.15)
         
-        // Agreeableness: Balanced patterns, moderate variety, harmony
-        let balance = 1.0 - abs(symmetry - 0.5) * 2.0 // Peaks at 0.5 symmetry
-        let agreeableness = clamp(balance * 0.3 + (1.0 - eraseRatio) * 0.3 + completeness * 0.2 + symmetry * 0.2)
+        // Agreeableness: Balanced patterns, cool themes boost harmony
+        let balance = 1.0 - abs(symmetry - 0.5) * 2.0
+        let coolBonus = (1.0 - bgWarmth) * 0.1
+        let agreeableness = clamp(balance * 0.3 + (1.0 - eraseRatio) * 0.25 + completeness * 0.2 + symmetry * 0.15 + coolBonus)
         
         // Neuroticism: High undo, high erase, indecisiveness
         let neuroticism = clamp(undoRatio * 0.4 + eraseRatio * 0.3 + (1.0 - completeness) * 0.2 + (1.0 - symmetry) * 0.1)
@@ -398,7 +418,8 @@ class PersonalityEngine {
     
     private static func generateDetailedInsight(
         bigFive: BigFiveTraits, cognitive: CognitiveStyle, colorProfile: ColorPsychologyProfile,
-        creative: CreativeProfile, symmetry: Double, completeness: Double
+        creative: CreativeProfile, symmetry: Double, completeness: Double,
+        themeMood: String = "balanced"
     ) -> String {
         var lines: [String] = []
         
@@ -412,8 +433,8 @@ class PersonalityEngine {
             lines.append("You think divergently, naturally exploring multiple creative directions rather than settling on one approach.")
         }
         
-        // Color insight
-        lines.append("Your \(colorProfile.temperament.lowercased()) color temperament with \(colorProfile.energyLevel.lowercased()) energy reveals: \(colorProfile.dominantEmotion).")
+        // Color + theme insight
+        lines.append("Your \(colorProfile.temperament.lowercased()) color temperament on a \(themeMood) canvas with \(colorProfile.energyLevel.lowercased()) energy reveals: \(colorProfile.dominantEmotion).")
         
         // Growth area
         if bigFive.openness < 0.4 {
