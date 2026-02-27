@@ -4,6 +4,7 @@ import SpriteKit
 struct GameView: View {
     @EnvironmentObject var gameState: GameState
     @State private var scene: MandalaScene?
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     var body: some View {
         GeometryReader { geo in
@@ -26,6 +27,32 @@ struct GameView: View {
                         .padding(.top, 6)
 
                     Spacer()
+                    
+                    // Floating Undo/Redo
+                    HStack(spacing: 10) {
+                        Spacer()
+                        Button(action: {
+                            NotificationCenter.default.post(name: .undoAction, object: nil)
+                            HapticManager.shared.toolSwitch()
+                        }) {
+                            Image(systemName: "arrow.uturn.backward.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(theme.accent.opacity(gameState.canUndo ? 0.9 : 0.2))
+                        }
+                        .disabled(!gameState.canUndo)
+                        
+                        Button(action: {
+                            NotificationCenter.default.post(name: .redoAction, object: nil)
+                            HapticManager.shared.toolSwitch()
+                        }) {
+                            Image(systemName: "arrow.uturn.forward.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(theme.accent.opacity(gameState.canRedo ? 0.9 : 0.2))
+                        }
+                        .disabled(!gameState.canRedo)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 4)
 
                     // Bottom
                     VStack(spacing: 6) {
@@ -63,6 +90,12 @@ struct GameView: View {
                                     .stroke(theme.accent.opacity(0.2), lineWidth: 1)
                             )
                     }
+                }
+                
+                if !hasSeenOnboarding {
+                    OnboardingView(theme: theme)
+                        .transition(.opacity.combined(with: .scale))
+                        .zIndex(100)
                 }
             }
         }

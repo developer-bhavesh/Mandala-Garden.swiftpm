@@ -3,6 +3,8 @@ import SwiftUI
 struct GalleryView: View {
     @EnvironmentObject var gameState: GameState
     @State private var selectedSnapshot: MandalaSnapshot? = nil
+    @State private var snapshotToDelete: MandalaSnapshot? = nil
+    @State private var showDeleteAlert = false
     
     var body: some View {
         let theme = gameState.activeTheme
@@ -64,9 +66,17 @@ struct GalleryView: View {
                     } else {
                         ScrollView(showsIndicators: false) {
                             LazyVGrid(columns: columns, spacing: 12) {
-                                ForEach(gameState.savedMandalas) { snapshot in
-                                    MandalaThumbnail(snapshot: snapshot, theme: theme, isCompact: isCompact)
-                                        .onTapGesture { selectedSnapshot = snapshot }
+                                ForEach(gameState.savedMandalas.reversed()) { snapshot in
+                                    MandalaThumbnail(snapshot: snapshot, theme: theme, isCompact: isCompact) {
+                                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                                            selectedSnapshot = snapshot
+                                        }
+                                        HapticManager.shared.toolSwitch()
+                                    } onDelete: {
+                                        snapshotToDelete = snapshot
+                                        showDeleteAlert = true
+                                        HapticManager.shared.erase()
+                                    }
                                 }
                             }
                             .padding(.horizontal, 14)
@@ -81,7 +91,6 @@ struct GalleryView: View {
                 }
             }
             
-            // Full Report overlay
             if let snapshot = selectedSnapshot {
                 ReportOverlay(snapshot: snapshot, theme: gameState.activeTheme) {
                     withAnimation(.easeInOut(duration: 0.25)) { selectedSnapshot = nil }
@@ -90,6 +99,20 @@ struct GalleryView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: selectedSnapshot?.id)
+        .alert(isPresented: $showDeleteAlert) {
+            Alert(
+                title: Text("Delete Mandala"),
+                message: Text("Are you sure you want to delete this mandala from your gallery? This cannot be undone."),
+                primaryButton: .destructive(Text("Delete")) {
+                    if let snapshot = snapshotToDelete {
+                        withAnimation {
+                            gameState.deleteSnapshot(id: snapshot.id)
+                        }
+                    }
+                },
+                secondaryButton: .cancel()
+            )
+        }
     }
     
     // MARK: - Helpers
@@ -135,6 +158,8 @@ struct MandalaThumbnail: View {
     let snapshot: MandalaSnapshot
     let theme: CityTheme
     let isCompact: Bool
+    let onTap: () -> Void
+    let onDelete: () -> Void
     
     var body: some View {
         VStack(spacing: 0) {
@@ -200,6 +225,8 @@ struct MandalaThumbnail: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(theme.accent.opacity(0.12), lineWidth: 1)
         )
+        .onTapGesture(perform: onTap)
+        .onLongPressGesture(perform: onDelete)
     }
 }
 
@@ -386,14 +413,31 @@ struct ReportOverlay: View {
                             .glassCard(cornerRadius: 14)
                         }
                         
-                        // Close
-                        Button(action: onDismiss) {
-                            Text("Close Report")
-                                .font(.custom("Georgia", size: 14).bold())
+                        // Close / Share
+                        VStack(spacing: 12) {
+                            Button(action: {
+                                ShareManager.shared.shareMandala(snapshot: snapshot, from: getRootViewController())
+                            }) {
+                                HStack {
+                                    Image(systemName: "square.and.arrow.up")
+                                    Text("Share My Mandala")
+                                        .font(.custom("Georgia", size: 14).bold())
+                                }
                                 .foregroundColor(theme.accent)
                                 .padding(.horizontal, 30)
                                 .padding(.vertical, 10)
-                                .background(Capsule().stroke(theme.accent, lineWidth: 1.5))
+                                .background(Capsule().fill(.ultraThinMaterial))
+                                .overlay(Capsule().stroke(theme.accent.opacity(0.3), lineWidth: 1.5))
+                            }
+                            
+                            Button(action: onDismiss) {
+                                Text("Close Report")
+                                    .font(.custom("Georgia", size: 14).bold())
+                                    .foregroundColor(theme.accent)
+                                    .padding(.horizontal, 30)
+                                    .padding(.vertical, 10)
+                                    .background(Capsule().stroke(theme.accent, lineWidth: 1.5))
+                            }
                         }
                         .padding(.vertical, 20)
                     }

@@ -220,7 +220,8 @@ struct PaletteView: View {
     }
 }
 
-// Notification for undo
+// Notifications for undo/redo
 extension Notification.Name {
     static let undoAction = Notification.Name("MandalaUndoAction")
+    static let redoAction = Notification.Name("MandalaRedoAction")
 }

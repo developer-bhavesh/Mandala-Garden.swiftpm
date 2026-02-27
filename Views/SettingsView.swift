@@ -52,6 +52,8 @@ struct CityTheme {
         accent: AppColors.fortAmber, icon: "shield.fill"
     )
 
+    static let allThemes: [CityTheme] = [.jaipur, .jodhpur, .udaipur, .jaisalmer, .bikaner, .pushkar, .chittorgarh]
+
     static func forKey(_ key: String) -> CityTheme {
         switch key {
         case "jodhpur": return .jodhpur

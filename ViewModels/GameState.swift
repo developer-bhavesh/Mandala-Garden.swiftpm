@@ -28,6 +28,7 @@ struct MandalaSnapshot: Identifiable, Codable {
     let date: Date
     let score: Int
     let moodTag: String
+    let themeName: String
     let personalityReport: PersonalityReport?
     
     var imageURL: URL {
@@ -35,11 +36,12 @@ struct MandalaSnapshot: Identifiable, Codable {
         return paths[0].appendingPathComponent("\(id.uuidString).png")
     }
     
-    init(score: Int, moodTag: String = "Unknown", report: PersonalityReport? = nil) {
+    init(score: Int, moodTag: String = "Unknown", themeName: String = "jaipur", report: PersonalityReport? = nil) {
         self.id = UUID()
         self.date = Date()
         self.score = score
         self.moodTag = moodTag
+        self.themeName = themeName
         self.personalityReport = report
     }
 }
@@ -146,6 +148,8 @@ class GameState: ObservableObject {
     
     @Published var savedMandalas: [MandalaSnapshot] = []
     
+    @Published var unlockedAchievements: Set<String> = []
+    
     // Signal for scene to rebuild
     @Published var shouldResetScene: Bool = false
     
@@ -163,14 +167,19 @@ class GameState: ObservableObject {
     @Published var currentStreak: Int = 0
     @Published var lastPlacedFlower: String? = nil
     
-    // Undo stack
+    // Undo/Redo stacks
     var undoStack: [UndoAction] = []
+    var redoStack: [UndoAction] = []
     let maxUndo = 20
+    
+    var canUndo: Bool { !undoStack.isEmpty }
+    var canRedo: Bool { !redoStack.isEmpty }
     
     private let saveKey = "MandalaGarden.SavedMandalas"
     
     init() {
         loadProgress()
+        loadAchievements()
         // Random city theme on each launch
         let allCities = ["jaipur", "jodhpur", "udaipur", "jaisalmer", "bikaner", "pushkar", "chittorgarh"]
         selectedGrid = allCities.randomElement() ?? "jaipur"
@@ -184,14 +193,26 @@ class GameState: ObservableObject {
     
     func pushUndo(_ action: UndoAction) {
         undoStack.append(action)
+        redoStack.removeAll() // Clear redo on new action
         if undoStack.count > maxUndo {
             undoStack.removeFirst()
         }
         undoCount += 1
+        objectWillChange.send()
     }
     
     func popUndo() -> UndoAction? {
-        return undoStack.popLast()
+        guard let action = undoStack.popLast() else { return nil }
+        redoStack.append(action)
+        objectWillChange.send()
+        return action
+    }
+    
+    func popRedo() -> UndoAction? {
+        guard let action = redoStack.popLast() else { return nil }
+        undoStack.append(action)
+        objectWillChange.send()
+        return action
     }
     
     func trackFlowerPlaced(_ flower: String) {
@@ -233,6 +254,49 @@ class GameState: ObservableObject {
         navigate(to: .game)
     }
     
+    // MARK: - Achievements
+    
+    private func getAchievementsURL() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("achievements.json")
+    }
+    
+    private func loadAchievements() {
+        if let data = try? Data(contentsOf: getAchievementsURL()),
+           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) {
+            self.unlockedAchievements = decoded
+        }
+    }
+    
+    private func saveAchievements() {
+        if let data = try? JSONEncoder().encode(unlockedAchievements) {
+            try? data.write(to: getAchievementsURL())
+        }
+    }
+    
+    func trackAchievements() {
+        let unlocks = AchievementManager.shared.checkAchievements(gameState: self, latestStreak: currentStreak)
+        if !unlocks.isEmpty {
+            for id in unlocks {
+                unlockedAchievements.insert(id)
+                print("🏆 Unlocked: \(id)")
+            }
+            saveAchievements()
+            HapticManager.shared.achievement()
+            SoundManager.shared.playAchievement()
+        }
+    }
+    
+    // MARK: - Gallery/Snapshots
+    
+    func deleteSnapshot(id: UUID) {
+        if let index = savedMandalas.firstIndex(where: { $0.id == id }) {
+            let snapshot = savedMandalas[index]
+            try? FileManager.default.removeItem(at: snapshot.imageURL)
+            savedMandalas.remove(at: index)
+            saveProgress()
+        }
+    }
+    
     func evaluateHarmony(slots: [HarmonyScorer.MandalaSlotData]) {
         lastSlotData = slots
         let insight = InsightEngine.analyze(slots: slots)
@@ -265,11 +329,12 @@ class GameState: ObservableObject {
     }
     
     func saveSnapshot(imageData: Data) {
-        let snapshot = MandalaSnapshot(score: harmonyScore, moodTag: currentMoodLabel, report: currentReport)
+        let snapshot = MandalaSnapshot(score: harmonyScore, moodTag: currentMoodLabel, themeName: selectedGrid, report: currentReport)
         do {
             try imageData.write(to: snapshot.imageURL)
             savedMandalas.insert(snapshot, at: 0)
             saveProgress()
+            trackAchievements()
         } catch {
             print("Failed to save snapshot: \(error)")
         }

@@ -4,6 +4,7 @@ struct MainMenuView: View {
     @EnvironmentObject var gameState: GameState
     @State private var logoRotation: Double = 0
     @State private var breathScale: CGFloat = 1.0
+    @State private var showAchievements = false
 
     var body: some View {
         let theme = gameState.activeTheme
@@ -95,14 +96,102 @@ struct MainMenuView: View {
                                 }
                             }
                         }
+                        
+                        Spacer().frame(height: 30)
+                        
+                        // Daily Challenge Card
+                        let challenge = DailyChallengeManager.shared.todayChallenge()
+                        let isCompleted = DailyChallengeManager.shared.isCompletedToday()
+                        
+                        VStack(spacing: 8) {
+                            HStack {
+                                Image(systemName: challenge.icon)
+                                    .font(.title2)
+                                    .foregroundColor(isCompleted ? AppColors.jaipurPink : theme.accent)
+                                Text("Daily Challenge")
+                                    .font(.custom("Georgia", size: 14).bold())
+                                    .foregroundColor(isCompleted ? AppColors.jaipurPink : theme.accent)
+                                Spacer()
+                                if isCompleted {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .foregroundColor(AppColors.jaipurPink)
+                                }
+                            }
+                            
+                            Text(challenge.title)
+                                .font(.custom("Georgia", size: 16).bold())
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            
+                            Text(challenge.description)
+                                .font(.custom("Georgia", size: 12))
+                                .foregroundColor(.white.opacity(0.7))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(isCompleted ? AppColors.jaipurPink.opacity(0.15) : theme.accent.opacity(0.15))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(isCompleted ? AppColors.jaipurPink.opacity(0.4) : theme.accent.opacity(0.3), lineWidth: 1)
+                        )
+                        .padding(.horizontal, 24)
+                        
+                        // Mandala of the Day
+                        VStack(spacing: 12) {
+                            HStack {
+                                Image(systemName: "sparkles")
+                                    .foregroundColor(theme.accent)
+                                Text("Inspiration: Mandala of the Day")
+                                    .font(.custom("Georgia", size: 14).bold())
+                                    .foregroundColor(AppColors.mograWhite)
+                                Spacer()
+                            }
+                            
+                            DailyMandalaCanvas(theme: theme)
+                                .frame(height: 120)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(theme.accent.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                        .padding(.horizontal, 24)
 
                         Spacer().frame(height: 40)
-
-                        
                     }
                     .frame(minHeight: geo.size.height)
                 }
             }
+            
+            // Floating Achievements Badge
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: { showAchievements = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "rosette")
+                            Text("\(gameState.unlockedAchievements.count)")
+                                .font(.custom("Georgia", size: 14).bold())
+                        }
+                        .foregroundColor(theme.accent)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(theme.bgColor))
+                        .overlay(Capsule().stroke(theme.accent.opacity(0.3), lineWidth: 1))
+                        .shadow(color: theme.accent.opacity(0.2), radius: 4, y: 2)
+                    }
+                    .padding(20)
+                }
+                Spacer()
+            }
+        }
+        .sheet(isPresented: $showAchievements) {
+            AchievementsView(theme: theme)
+                .environmentObject(gameState)
         }
         .onAppear {
             withAnimation(.linear(duration: 60).repeatForever(autoreverses: false)) {

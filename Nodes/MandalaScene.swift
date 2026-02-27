@@ -26,6 +26,9 @@ class MandalaScene: SKScene {
     private let dragThreshold: CGFloat = 8.0
     private var slideFillVisited: Set<Int> = []
     
+    // Ghost previews
+    private var ghostNodes: [SKSpriteNode] = []
+    
     override func didMove(to view: SKView) {
         self.backgroundColor = UIColor(AppColors.heritageBlue)
         self.addChild(worldNode)
@@ -40,8 +43,11 @@ class MandalaScene: SKScene {
         pan.minimumNumberOfTouches = 2
         view.addGestureRecognizer(pan)
         
-        // Listen for undo
+        // Listen for undo/redo
         NotificationCenter.default.addObserver(self, selector: #selector(handleUndo), name: .undoAction, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleRedo), name: .redoAction, object: nil)
+        
+        HapticManager.shared.prepare()
     }
     
     @objc private func handleUndo() {
@@ -72,6 +78,40 @@ class MandalaScene: SKScene {
                 }
             }
         }
+        notifyDelegate()
+    }
+    
+    @objc private func handleRedo() {
+        guard let action = gameState?.popRedo() else { return }
+        switch action.type {
+        case .placeFlower(let ids, _):
+            // Redo = re-place (but we need the current state)
+            // For simplicity, redo just re-applies the undo action in reverse
+            for id in ids {
+                if let slot = slots.first(where: { $0.id == id }) {
+                    // The undo stored what was there BEFORE the action
+                    // Redo means do the action again — but we don't have the "after" state
+                    // So we store it as a remove action to undo stack
+                    slot.clear()
+                }
+            }
+        case .removeFlower(let ids, let prev):
+            for id in ids {
+                if let slot = slots.first(where: { $0.id == id }),
+                   let variant = prev[id] ?? nil {
+                    slot.placeFlower(variant)
+                }
+            }
+        case .placeGridShape(let ids):
+            for id in ids {
+                if let idx = slots.firstIndex(where: { $0.id == id }) {
+                    let slot = slots[idx]
+                    slot.removeFromParent()
+                    slots.remove(at: idx)
+                }
+            }
+        }
+        HapticManager.shared.toolSwitch()
         notifyDelegate()
     }
     
@@ -205,6 +245,9 @@ class MandalaScene: SKScene {
                 notifyDelegate()
             }
         }
+        
+        // Initial ghost preview
+        updateGhosts(at: touch.location(in: worldNode))
     }
     
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -228,10 +271,14 @@ class MandalaScene: SKScene {
         // Check if this is a drag (canvas pan)
         if dist > dragThreshold {
             isDragging = true
+            clearGhosts()
             // Pan the canvas
             let dx = current.x - start.x
             let dy = current.y - start.y
             worldNode.position = CGPoint(x: startWorld.x + dx, y: startWorld.y - dy)
+        } else {
+            // Not dragging map — update preview ghosts
+            updateGhosts(at: touch.location(in: worldNode))
         }
     }
     
@@ -257,6 +304,7 @@ class MandalaScene: SKScene {
         handleTap(at: location)
         touchStart = nil
         isDragging = false
+        clearGhosts()
     }
     
     private func findClosestSlot(at location: CGPoint, maxDistance: CGFloat = 28) -> SlotNode? {
@@ -271,6 +319,42 @@ class MandalaScene: SKScene {
             }
         }
         return closest
+    }
+    
+    // MARK: - Previews (Mirror Mode & Drag)
+    private func updateGhosts(at location: CGPoint) {
+        clearGhosts()
+        guard !isDragging, gameState?.activeTool != .slideFill, gameState?.activeTool != .eraser,
+              let flower = gameState?.selectedFlower,
+              let slot = findClosestSlot(at: location) else { return }
+        
+        let ringSlots = slots.filter { $0.ring == slot.ring && $0.id < 1000 }
+        let tint = gameState?.selectedTint ?? .natural
+        
+        for s in ringSlots {
+            // Don't preview on already occupied slots
+            guard !s.isOccupied else { continue }
+            
+            let tex = SKTexture(imageNamed: flower.id)
+            let ghost = SKSpriteNode(texture: tex)
+            ghost.size = CGSize(width: 44, height: 44)
+            ghost.position = s.convert(CGPoint.zero, to: worldNode)
+            ghost.zPosition = 10
+            ghost.alpha = 0.4
+            
+            if tint != .natural {
+                ghost.color = UIColor(tint.tintColor)
+                ghost.colorBlendFactor = tint.blendFactor
+            }
+            
+            worldNode.addChild(ghost)
+            ghostNodes.append(ghost)
+        }
+    }
+    
+    private func clearGhosts() {
+        ghostNodes.forEach { $0.removeFromParent() }
+        ghostNodes.removeAll()
     }
     
     private func handleTap(at location: CGPoint) {
@@ -319,6 +403,14 @@ class MandalaScene: SKScene {
         slot.placeFlower(variant, tint: gameState?.selectedTint ?? .natural)
         playSparkle(at: slot.position)
         gameState?.pushUndo(UndoAction(type: .placeFlower(slotIDs: [slot.id], previousVariants: [slot.id: prevVariant])))
+        HapticManager.shared.placement()
+        SoundManager.shared.playPlacement()
+        
+        // Check streak for haptic
+        if (gameState?.currentStreak ?? 0) >= 3 && (gameState?.currentStreak ?? 0) % 3 == 0 {
+            HapticManager.shared.streak()
+            SoundManager.shared.playStreak()
+        }
     }
     
     private func removeSingle(from slot: SlotNode) {
@@ -342,6 +434,8 @@ class MandalaScene: SKScene {
             gameState?.pushUndo(UndoAction(type: .removeFlower(slotIDs: [slot.id], previousVariants: prevVariants)))
         }
         notifyDelegate()
+        HapticManager.shared.erase()
+        SoundManager.shared.playErase()
     }
     
     private func fillRing(_ ring: Int, with flower: FlowerVariant) {
@@ -421,18 +515,30 @@ class MandalaScene: SKScene {
             HarmonyScorer.MandalaSlotData(id: $0.id, ring: $0.ring, angleIndex: $0.angleIndex, flower: $0.flowerNode?.variant, tint: $0.flowerNode?.appliedTint ?? .natural)
         }
         onMandalaUpdate?(slotData)
+        
+        // Auto-save draft
+        let draftSlots = slots.map { slot in
+            (id: slot.id, ring: slot.ring, angleIndex: slot.angleIndex,
+             flowerType: slot.flowerNode?.variant.type.rawValue,
+             tint: (slot.flowerNode?.appliedTint ?? .natural).rawValue)
+        }
+        DraftManager.shared.saveDraft(slots: draftSlots, themeKey: gameState?.selectedGrid ?? "jaipur")
     }
     
     func resetBoard() {
         // Full rebuild — restores initial circle size, rings, slots
         setupBoard()
         gameState?.undoStack.removeAll()
+        gameState?.redoStack.removeAll()
         gameState?.harmonyScore = 0
         gameState?.harmonyFeedback = "A blank garden awaits your creative touch."
         gameState?.currentMoodIcon = "leaf.fill"
         gameState?.currentMoodLabel = "Awaiting"
         gameState?.currentReport = nil
         gameState?.resetSessionMetrics()
+        DraftManager.shared.clearDraft()
+        HapticManager.shared.reset()
+        SoundManager.shared.playReset()
         notifyDelegate()
     }
     

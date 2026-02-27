@@ -234,6 +234,13 @@ struct InsightView: View {
                         RajButton("Return to Canvas", icon: "paintbrush.fill", color: theme.accent) {
                             gameState.navigate(to: .game)
                         }
+                        
+                        if let lastSnapshot = gameState.savedMandalas.last {
+                            RajButton("Share My Mandala", icon: "square.and.arrow.up", color: theme.accent) {
+                                ShareManager.shared.shareMandala(snapshot: lastSnapshot, from: getRootViewController())
+                            }
+                        }
+                        
                         RajButton("Main Menu", icon: "house", color: AppColors.indigo) {
                             gameState.navigate(to: .menu)
                         }
@@ -407,5 +414,13 @@ struct RadarChartView: View {
     
     private func angleFor(index: Int, total: Int) -> CGFloat {
         -.pi / 2 + (2 * .pi / CGFloat(total)) * CGFloat(index)
+    }
+}
+
+// Helper to get root view controller for share sheet
+extension View {
+    func getRootViewController() -> UIViewController? {
+        guard let screen = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return nil }
+        return screen.windows.first?.rootViewController
     }
 }
