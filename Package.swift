@@ -16,8 +16,8 @@ let package = Package(
         .iOSApplication(
             name: "Mandala Garden",
             targets: ["AppModule"],
-            bundleIdentifier: "com.soniya.mandala",
-            teamIdentifier: "788P3925GD",
+            bundleIdentifier: "com.ayinos.mandala",
+            teamIdentifier: "X897MU9AX9",
             displayVersion: "1.0",
             bundleVersion: "1",
             appIcon: .asset("AppIcon"),
@@ -34,7 +34,8 @@ let package = Package(
             ],
             capabilities: [
                 .fileAccess(.downloadsFolder, mode: .readWrite)
-            ]
+            ],
+            appCategory: .healthcareFitness
         )
     ],
     targets: [

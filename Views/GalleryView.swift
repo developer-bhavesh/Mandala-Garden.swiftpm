@@ -89,6 +89,7 @@ struct GalleryView: View {
                     }
                     .padding(.bottom, 20)
                 }
+                .frame(width: geo.size.width, height: geo.size.height)
             }
             
             if let snapshot = selectedSnapshot {
